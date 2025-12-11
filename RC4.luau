@@ -68,19 +68,9 @@ local crypt: (msg: string, key: buffer) -> (buffer, buffer) = @native function(m
 
 	return chiper, sbox;
 end;
-
-local decrypt: (chiper: buffer, key: buffer) -> buffer = @native function(chiper: buffer, key: buffer): buffer
-	local decrypted: buffer, sbox: buffer = crypt(buffer.tostring(chiper), key);
-	rset(sbox, key);
+return @native function(text: buffer, key: buffer): buffer
+	local result: buffer, sbox: buffer = crypt(buffer.tostring(text), key);
 	
-	return decrypted;
+	rset(sbox, key);
+	return result;
 end;
-return table.freeze({
-	crypt = @native function(msg: buffer, key: buffer): buffer	
-		local chiper: buffer, sbox: buffer = crypt(buffer.tostring(msg), key);
-		rset(sbox, key);
-		
-		return chiper;
-	end,
-	decrypt = decrypt;
-});
