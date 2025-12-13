@@ -2,79 +2,90 @@
 --!native
 --!optimize 2
 
-local sbox_length: number = 500; --TODO: guh
-local swap: (i: number, j: number, sbox: buffer) -> () = @native function(i: number, j: number, sbox: buffer): ()
+--[[local swap: (i: number, j: number, sbox: buffer) -> () = @native function(i: number, j: number, sbox: buffer): ()
 	local old_num: number = buffer.readu8(sbox, i);
 	buffer.writeu8(sbox, i, buffer.readu8(sbox, i));
-	
-	--[[if (j > buffer.len(sbox)) then
-		print("no")
-		return;
-	end;]]
-	
 	buffer.writeu8(sbox, j, old_num);
 	return;
 end;
-
 local rset: (sbox: buffer, key: buffer) -> () = @native function(sbox: buffer, key: buffer): ()
 	buffer.fill(sbox, 0, 0);
-	buffer.fill(sbox, 0, 0);
+	buffer.fill(key, 0, 0);
 
 	return;
-end;
+end;]]
+
 local generate_sbox: (key_str: buffer, msg: buffer) -> buffer = @native function(key_str: buffer, msg: buffer): buffer
-	local result = buffer.create((sbox_length + buffer.len(key_str) + buffer.len(msg)));
+	local key_len: number = buffer.len(key_str);
+	local msg_len: number = buffer.len(msg);
+	
+	local result = buffer.create((500 + key_len + msg_len));
 	local j: number = 0;
 	
-	for i: number = 1, (sbox_length) do
-		i -= 1;
-		buffer.writeu8(result, i, i);
+	
+	for i: number = 1, (500) do
+		buffer.writeu8(result, i-1, i-1);
 	end;
-	
-	
-	for i: number = 1, (sbox_length) do
-		i -= 1;
+	for i: number = 1, (500) do
+		j = (((j + buffer.readu8(result, i-1) + bit32.band(buffer.readu8(key_str, (i%key_len)), (i-1 % key_len) + 1, 0xFF)) % 500));
 		
-		j = (((j + buffer.readu8(result, i) + bit32.band(buffer.readu8(key_str, (i%buffer.len(key_str))), (i % buffer.len(key_str)) + 1, 0xFF)) % sbox_length));
-		swap(i, j, result);
+		do
+			local old_num: number = buffer.readu8(result, i-1);
+			buffer.writeu8(result, i-1, buffer.readu8(result, i-1));
+			
+			buffer.writeu8(result, j, old_num);
+		end;
+
 	end;
 	return result;
 end;
 
 
-local crypt: (msg: buffer, key: buffer) -> (buffer, buffer) = @native function(msg: buffer, key: buffer): (buffer, buffer)
+return @native function(msg: buffer, key: buffer): buffer
 	local chiper: buffer = buffer.create(buffer.len(msg));
 	local sbox: buffer = generate_sbox(key, msg);
-	
-	
+
+
 	local i: number = 0;
 	local j: number = 0;
-	
+
 	local offset: number = 0;
-	for n: number = 1, (buffer.len(msg)+1) - 1, 1 do
+	local msg_len: number = buffer.len(msg);
+
+	for n: number = 1, (msg_len+1) - 1, 1 do
 		local byte: number = buffer.readu8(msg, offset);
 		offset += 1;
-		
-		i = ((i + 1) % sbox_length)
-		j = (bit32.band((j + buffer.readu8(sbox, i) % sbox_length), sbox_length));
-		
-		swap(i, j, sbox);
-		
-		local read: number = buffer.readu8(sbox, i);
-		--warn(j, buffer.len(sbox))
-		read += (buffer.readu8(sbox, j) % sbox_length);
-		
-		local chiper_text: number = bit32.bxor(byte, read);
-		--warn(n, string.len(msg))
-		
-		buffer.writeu8(chiper, (n-1), chiper_text);
-	end;
 
-	return chiper, sbox;
-end;
-return @native function(text: buffer, key: buffer): buffer
-	local result: buffer, sbox: buffer = crypt(text, key);
+		i = ((i + 1) % 500);
+		local read: number = buffer.readu8(sbox, i);
+
+
+		j = (bit32.band((j + read % 500), 500));
+		do
+			local old_num: number = buffer.readu8(sbox, i);
+
+			buffer.writeu8(sbox, i, buffer.readu8(sbox, i));
+			buffer.writeu8(sbox, j, old_num);
+			
+			old_num = nil :: never;
+		end;
+
+		read += (buffer.readu8(sbox, j) % 500);
+		local chiper_text: number = bit32.bxor(byte, read);
+
+		buffer.writeu8(chiper, (n-1), chiper_text);
+		read = nil :: never;
+		
+		chiper_text = nil :: never;
+		byte = nil :: never;
+	end;
 	
-	rset(sbox, key);
-	return result;
+	buffer.fill(sbox, 0, 0);
+	msg = nil :: never;
+	
+	key = nil :: never;
+	sbox = nil :: never;
+	
+	msg_len = nil :: never;
+	return chiper;
 end;
